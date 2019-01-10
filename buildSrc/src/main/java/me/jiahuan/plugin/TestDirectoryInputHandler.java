@@ -8,7 +8,7 @@ public class TestDirectoryInputHandler {
     public static void handle(File dir) {
         System.out.println("class dir path = " + dir.getAbsolutePath());
         if (dir.isDirectory() && dir.exists()) {
-            // 递归便利
+            // 递归遍历
             for (File file : dir.listFiles()) {
                 handle(file);
             }
@@ -27,7 +27,7 @@ public class TestDirectoryInputHandler {
                 ClassReader classReader = new ClassReader(inputStream);
                 ClassWriter classWriter = new ClassWriter(ClassWriter.COMPUTE_MAXS);
                 // 自定义ClassVisitor
-                CallClassVisitor callClassVisitor = new CallClassVisitor(classWriter);
+                CallClassVisitor callClassVisitor = new CallClassVisitor(classWriter, file.getName());
                 classReader.accept(callClassVisitor, 0);
                 // 输出临时class文件路径
                 String tempFilePath = file.getParentFile().getAbsolutePath() + File.separator + file.getName() + ".opt";
@@ -62,34 +62,43 @@ public class TestDirectoryInputHandler {
 
     static class CallClassVisitor extends ClassVisitor implements Opcodes {
 
+        private String mClassName;
 
-        public CallClassVisitor(ClassVisitor cv) {
+        public CallClassVisitor(ClassVisitor cv, String className) {
             super(ASM6, cv);
+            mClassName = className;
         }
 
         @Override
         public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
-            System.out.println("method name = " + name);
+            System.out.println("method name = " + name + ", signature = " + signature + ", desc = " + desc);
             MethodVisitor mv = super.visitMethod(access, name, desc, signature, exceptions);
-            return mv == null ? null : new CallMethodVisitor(mv, name);
+            return mv == null ? null : new CallMethodVisitor(mv, mClassName, name, desc);
         }
     }
 
     static class CallMethodVisitor extends MethodVisitor implements Opcodes {
 
         private String mName;
+        private String mDesc;
+        private String mClassName;
 
-        public CallMethodVisitor(MethodVisitor mv, String name) {
+        public CallMethodVisitor(MethodVisitor mv, String className, String name, String desc) {
             super(ASM6, mv);
+            mClassName = className;
             mName = name;
+            mDesc = desc;
         }
 
         @Override
         public void visitCode() {
-            if ("onCreate".equals(mName)) {
-                mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;");
-                mv.visitLdcInsn("CALL " + mName);
-                mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false);
+            if (mName.startsWith("hello")) {
+//                GETSTATIC me/jiahuan/gradle_plugin_sample/CostCalculator.INSTANCE : Lme/jiahuan/gradle_plugin_sample/CostCalculator;
+                mv.visitFieldInsn(GETSTATIC, "me/jiahuan/gradle_plugin_sample/CostCalculator", "INSTANCE", "Lme/jiahuan/gradle_plugin_sample/CostCalculator;");
+//                LDC "haha"
+                mv.visitLdcInsn(mClassName + mName + mDesc);
+//                INVOKEVIRTUAL me/jiahuan/gradle_plugin_sample/CostCalculator.startCal (Ljava/lang/String;)V
+                mv.visitMethodInsn(INVOKEVIRTUAL, "me/jiahuan/gradle_plugin_sample/CostCalculator", "startCal", "(Ljava/lang/String;)V", false);
             }
         }
 
@@ -112,10 +121,15 @@ public class TestDirectoryInputHandler {
 
         @Override
         public void visitInsn(int opcode) {
-            if (opcode == RETURN) {
-                mv.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;");
-                mv.visitLdcInsn("RETURN " + mName);
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/String;)V", false);
+            if (mName.startsWith("hello")) {
+                if (opcode == RETURN) {
+//                    GETSTATIC me/jiahuan/gradle_plugin_sample/CostCalculator.INSTANCE : Lme/jiahuan/gradle_plugin_sample/CostCalculator;
+                    mv.visitFieldInsn(GETSTATIC, "me/jiahuan/gradle_plugin_sample/CostCalculator", "INSTANCE", "Lme/jiahuan/gradle_plugin_sample/CostCalculator;");
+//                    LDC "haha"
+                    mv.visitLdcInsn(mClassName + mName + mDesc);
+//                    INVOKEVIRTUAL me/jiahuan/gradle_plugin_sample/CostCalculator.endCal (Ljava/lang/String;)V
+                    mv.visitMethodInsn(INVOKEVIRTUAL, "me/jiahuan/gradle_plugin_sample/CostCalculator", "endCal", "(Ljava/lang/String;)V", false);
+                }
             }
             super.visitInsn(opcode);
         }
